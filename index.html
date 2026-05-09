@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>二項分布 確率計算ツール</title>
+    <title> 確率計算ツール</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
       body { font-family: system-ui, -apple-system, sans-serif; margin: 24px; line-height: 1.5; }
@@ -24,29 +24,28 @@
     </style>
   </head>
   <body>
-    <h1>二項分布 確率計算ツール</h1>
-    <p class="desc">PMF: f(k)=C(n,k)p^k(1-p)^(n-k)、CDF: F(k)=P(X≤k)。切替ボタンで P(X≥k) に変更できます。</p>
-
+    <h1> 確率計算ツール</h1>
+    <p class="desc">想定している真の発生確率をp(0≤p≤1)、試行回数をn回として入力してください。<br>その場合に 「発生回数がちょうどk回となる確率f(k)」 のグラフと、 「発生回数がk回以下となる確率F(k)」 のグラフが下に出ます。<br>kも入力すると、そのkにおけるf(k)とF(k)の値も下に出力します。<br>また切り替えボタンを押すと、F(k)のグラフや値を「k回以下」から「k回以上」に切り替えた場合のものに切り替えできます。</p>
     <div class="panel">
       <div class="grid">
         <div>
-          <label for="p">真の確率 p (0 ≤ p &lt; 1)</label>
-          <input id="p" type="number" step="any" value="0.5" />
+          <label for="p">真の発生確率 p (0 ≤ p ≤ 1)</label>
+          <input id="p" type="number" step="any" value="0.3" />
         </div>
         <div>
           <label for="n">試行回数 n (整数)</label>
-          <input id="n" type="number" step="1" min="0" value="10" />
+          <input id="n" type="number" step="1" min="0" value="100" />
         </div>
         <div>
-          <label for="k">評価したい回数 k (整数)</label>
-          <input id="k" type="number" step="1" min="0" value="3" />
+          <label for="k">発生回数 k (整数)</label>
+          <input id="k" type="number" step="1" min="0" value="40" />
         </div>
         <div>
           <button id="calc" class="primary">計算・グラフ更新</button>
         </div>
       </div>
       <div style="margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap;">
-        <button id="tailToggle">累積分布を P(X≤k) から P(X≥k) に切替</button>
+        <button id="tailToggle"> F(k)のグラフや値を「k回以下」の場合から「k回以上」の場合に切替</button>
       </div>
       <div id="error" class="error"></div>
       <div id="pmfResult" class="result"></div>
@@ -55,11 +54,11 @@
 
     <div class="charts">
       <div class="panel">
-        <h2>離散型確率分布 (PMF)</h2>
+        <h2>発生回数がちょうどk回となる確率f(k)</h2>
         <canvas id="pmfChart"></canvas>
       </div>
       <div class="panel">
-        <h2 id="cdfTitle">離散型累積分布 (CDF: P(X≤k))</h2>
+        <h2 id="cdfTitle">発生回数がk回以下となる確率F(k)</h2>
         <canvas id="cdfChart"></canvas>
       </div>
     </div>
@@ -106,7 +105,7 @@
       }
 
       function validInputs(p, n, k) {
-        if (!(p >= 0 && p < 1)) return 'p は 0 以上 1 未満で入力してください。';
+        if (!(p >= 0 && p <= 1)) return 'p は 0 以上 1 以下で入力してください。';
         if (!Number.isInteger(n) || n < 0) return 'n は 0 以上の整数で入力してください。';
         if (!Number.isInteger(k) || k < 0 || k > n) return 'k は 0 以上 n 以下の整数で入力してください。';
         return '';
@@ -129,21 +128,21 @@
         const ks = Array.from({ length: n + 1 }, (_, i) => i);
         const { pmf, cdf } = buildData(n, p);
 
-        const pmfAtK = pmf[k];
-        const lowerAtK = cdf[k];
-        const upperAtK = 1 - (k === 0 ? 0 : cdf[k - 1]);
+        const pmfAtK = pmf[k] * 100;
+        const lowerAtK = cdf[k] * 100;
+        const upperAtK = 100 - (k === 0 ? 0 : cdf[k - 1] * 100);
 
-        pmfResult.innerHTML = `<span class="mono">f(${k}) = P(X=${k}) = ${pmfAtK.toPrecision(10)}</span>`;
+        pmfResult.innerHTML = `<span class="mono">発生回数がちょうど${k}回となる確率f(${k}) = ${pmfAtK.toPrecision(6)} %</span>`;
 
         if (useUpperTail) {
-          cdfResult.innerHTML = `<span class="mono">P(X≥${k}) = ${upperAtK.toPrecision(10)}</span>`;
-          cdfTitle.textContent = '離散型累積分布 (上側確率: P(X≥k))';
-          toggleBtn.textContent = '累積分布を P(X≥k) から P(X≤k) に切替';
+          cdfResult.innerHTML = `<span class="mono">発生回数が${k}回以上となる確率F(${k}) = ${upperAtK.toPrecision(6)} %</span>`;
+          cdfTitle.textContent = '発生回数がk回以上となる確率F(k)';
+          toggleBtn.textContent = 'F(k)を「k回以下」の場合に切替';
           toggleBtn.classList.add('active');
         } else {
-          cdfResult.innerHTML = `<span class="mono">F(${k}) = P(X≤${k}) = ${lowerAtK.toPrecision(10)}</span>`;
-          cdfTitle.textContent = '離散型累積分布 (CDF: P(X≤k))';
-          toggleBtn.textContent = '累積分布を P(X≤k) から P(X≥k) に切替';
+          cdfResult.innerHTML = `<span class="mono">発生回数が${k}回以下となる確率F(${k}) = ${lowerAtK.toPrecision(6)} %</span>`;
+          cdfTitle.textContent = '発生回数がk回以下となる確率F(k)';
+          toggleBtn.textContent = 'F(k)を「k回以上」の場合に切替';
           toggleBtn.classList.remove('active');
         }
 
