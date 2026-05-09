@@ -227,7 +227,7 @@
           type: 'line',
           data: {
             labels: ks,
-            datasets: [{ label: useUpperTail ? 'P(X≥k)' : 'F(k)=P(X≤k)', data: cdfForPlot, stepped: true }],
+            datasets: [{ label: useUpperTail ? 'F(k)=P(X≥k)' : 'F(k)=P(X≤k)', data: cdfForPlot, stepped: true }],
           },
           options: {
             plugins: {
