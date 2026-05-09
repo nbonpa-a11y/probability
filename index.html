@@ -77,6 +77,12 @@
       let useUpperTail = false;
       let pmfChart, cdfChart;
 
+      function formatPercentSignificant4(probability) {
+        const percent = probability * 100;
+        if (percent === 0) return '0.000%';
+        return `${percent.toPrecision(4)}%`;
+      }
+
       // Lanczos approximation for numerically stable log-gamma.
       function logGamma(z) {
         const p = [
@@ -175,6 +181,13 @@
             datasets: [{ label: 'f(k)=P(X=k)', data: pmf }],
           },
           options: {
+            plugins: {
+              tooltip: {
+                callbacks: {
+                  label: (context) => `${context.dataset.label}: ${formatPercentSignificant4(context.parsed.y)}`,
+                },
+              },
+            },
             scales: {
               x: { title: { display: true, text: '発生回数 k' } },
               y: {
@@ -194,6 +207,13 @@
             datasets: [{ label: useUpperTail ? 'P(X≥k)' : 'F(k)=P(X≤k)', data: cdfForPlot, stepped: true }],
           },
           options: {
+            plugins: {
+              tooltip: {
+                callbacks: {
+                  label: (context) => `${context.dataset.label}: ${formatPercentSignificant4(context.parsed.y)}`,
+                },
+              },
+            },
             scales: {
               x: { title: { display: true, text: '発生回数 k' } },
               y: {
