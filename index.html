@@ -133,7 +133,7 @@
       }
 
       function findDefaultRange(n, pmf) {
-        const threshold = 1e-6;
+        const threshold = 1e-4;
         let left = 0;
         while (left < n && pmf[left] < threshold) left++;
         let right = n;
