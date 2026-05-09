@@ -126,7 +126,7 @@
         for (let k = 0; k <= n; k++) {
           const v = binomPmf(n, p, k);
           pmf.push(v);
-          sum += v;␊
+          sum += v;
           cdf.push(Math.min(1, sum));
         }
         return { pmf, cdf };
