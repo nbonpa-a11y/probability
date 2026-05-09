@@ -159,6 +159,17 @@
             labels: ks,
             datasets: [{ label: 'f(k)=P(X=k)', data: pmf }],
           },
+          options: {
+            scales: {
+              x: { title: { display: true, text: '発生回数 k' } },
+              y: {
+                title: { display: true, text: '確率 (%)' },
+                ticks: {
+                  callback: (value) => `${(Number(value) * 100).toFixed(0)}%`,
+                },
+              },
+            },
+          },
         });
 
         cdfChart = new Chart(document.getElementById('cdfChart'), {
@@ -166,6 +177,17 @@
           data: {
             labels: ks,
             datasets: [{ label: useUpperTail ? 'P(X≥k)' : 'F(k)=P(X≤k)', data: cdfForPlot, stepped: true }],
+          },
+          options: {
+            scales: {
+              x: { title: { display: true, text: '発生回数 k' } },
+              y: {
+                title: { display: true, text: '確率 (%)' },
+                ticks: {
+                  callback: (value) => `${(Number(value) * 100).toFixed(0)}%`,
+                },
+              },
+            },
           },
         });
       }
