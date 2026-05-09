@@ -77,18 +77,33 @@
       let useUpperTail = false;
       let pmfChart, cdfChart;
 
-      function combination(n, k) {
-        if (k < 0 || k > n) return 0;
-        const kk = Math.min(k, n - k);
-        let res = 1;
-        for (let i = 1; i <= kk; i++) {
-          res = (res * (n - kk + i)) / i;
-        }
-        return res;
+      // Lanczos approximation for numerically stable log-gamma.
+      function logGamma(z) {
+        const p = [
+          676.5203681218851, -1259.1392167224028, 771.32342877765313,
+          -176.61502916214059, 12.507343278686905, -0.13857109526572012,
+          9.9843695780195716e-6, 1.5056327351493116e-7,
+        ];
+        if (z < 0.5) return Math.log(Math.PI) - Math.log(Math.sin(Math.PI * z)) - logGamma(1 - z);
+        let x = 0.99999999999980993;
+        let t = z - 1;
+        for (let i = 0; i < p.length; i++) x += p[i] / (t + i + 1);
+        const g = 7;
+        const y = t + g + 0.5;
+        return 0.5 * Math.log(2 * Math.PI) + (t + 0.5) * Math.log(y) - y + Math.log(x);
+      }
+
+      function logCombination(n, k) {
+        if (k < 0 || k > n) return -Infinity;
+        return logGamma(n + 1) - logGamma(k + 1) - logGamma(n - k + 1);
       }
 
       function binomPmf(n, p, k) {
-        return combination(n, k) * (p ** k) * ((1 - p) ** (n - k));
+        if (p === 0) return k === 0 ? 1 : 0;
+        if (p === 1) return k === n ? 1 : 0;
+        const logP = logCombination(n, k) + k * Math.log(p) + (n - k) * Math.log(1 - p);
+        const v = Math.exp(logP);
+        return Number.isFinite(v) ? v : 0;
       }
 
       function buildData(n, p) {
@@ -99,7 +114,7 @@
           const v = binomPmf(n, p, k);
           pmf.push(v);
           sum += v;
-          cdf.push(sum);
+          cdf.push(Math.min(1, sum));
         }
         return { pmf, cdf };
       }
@@ -183,6 +198,8 @@
               x: { title: { display: true, text: '発生回数 k' } },
               y: {
                 title: { display: true, text: '確率 (%)' },
+                min: 0,
+                max: 1,
                 ticks: {
                   callback: (value) => `${(Number(value) * 100).toFixed(0)}%`,
                 },
