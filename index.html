@@ -21,6 +21,7 @@
       canvas { max-height: 340px; }
       .error { color: #b91c1c; margin-top: 8px; font-weight: 700; }
       .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+      .chart-controls { margin-top: 8px; }
     </style>
   </head>
   <body>
@@ -56,10 +57,12 @@
       <div class="panel">
         <h2>発生回数がちょうどk回となる確率f(k)</h2>
         <canvas id="pmfChart"></canvas>
+        <div class="chart-controls"><button id="pmfViewToggle">グラフ全体表示</button></div>
       </div>
       <div class="panel">
         <h2 id="cdfTitle">発生回数がk回以下となる確率F(k)</h2>
         <canvas id="cdfChart"></canvas>
+        <div class="chart-controls"><button id="cdfViewToggle">グラフ全体表示</button></div>
       </div>
     </div>
 
@@ -73,9 +76,13 @@
       const pmfResult = document.getElementById('pmfResult');
       const cdfResult = document.getElementById('cdfResult');
       const cdfTitle = document.getElementById('cdfTitle');
+      const pmfViewToggle = document.getElementById('pmfViewToggle');
+      const cdfViewToggle = document.getElementById('cdfViewToggle');
 
       let useUpperTail = false;
       let pmfChart, cdfChart;
+      let showFullPmf = false;
+      let showFullCdf = false;
 
       function formatPercentSignificant4(probability) {
         const percent = probability * 100;
@@ -119,10 +126,21 @@
         for (let k = 0; k <= n; k++) {
           const v = binomPmf(n, p, k);
           pmf.push(v);
-          sum += v;
+          sum += v;␊
           cdf.push(Math.min(1, sum));
         }
         return { pmf, cdf };
+      }
+
+      function findDefaultRange(n, pmf) {
+        const threshold = 1e-6;
+        let left = 0;
+        while (left < n && pmf[left] < threshold) left++;
+        let right = n;
+        while (right > 0 && pmf[right] < threshold) right--;
+        if (left >= right) return { min: 0, max: Math.min(n, 100) };
+        const pad = Math.max(2, Math.floor((right - left) * 0.1));
+        return { min: Math.max(0, left - pad), max: Math.min(n, right + pad) };
       }
 
       function validInputs(p, n, k) {
@@ -148,6 +166,11 @@
 
         const ks = Array.from({ length: n + 1 }, (_, i) => i);
         const { pmf, cdf } = buildData(n, p);
+        const defaultRange = findDefaultRange(n, pmf);
+        const pmfXRange = showFullPmf ? { min: 0, max: n } : defaultRange;
+        const cdfXRange = showFullCdf ? { min: 0, max: n } : defaultRange;
+        pmfViewToggle.textContent = showFullPmf ? '省略表示に戻す' : 'グラフ全体表示';
+        cdfViewToggle.textContent = showFullCdf ? '省略表示に戻す' : 'グラフ全体表示';
 
         const pmfAtK = pmf[k] * 100;
         const lowerAtK = cdf[k] * 100;
@@ -189,7 +212,7 @@
               },
             },
             scales: {
-              x: { title: { display: true, text: '発生回数 k' } },
+              x: { title: { display: true, text: '発生回数 k' }, min: pmfXRange.min, max: pmfXRange.max },
               y: {
                 title: { display: true, text: '確率 (%)' },
                 ticks: {
@@ -204,7 +227,7 @@
           type: 'line',
           data: {
             labels: ks,
-            datasets: [{ label: useUpperTail ? 'F(k)=P(X≥k)' : 'F(k)=P(X≤k)', data: cdfForPlot, stepped: true }],
+            datasets: [{ label: useUpperTail ? 'P(X≥k)' : 'F(k)=P(X≤k)', data: cdfForPlot, stepped: true }],
           },
           options: {
             plugins: {
@@ -215,7 +238,7 @@
               },
             },
             scales: {
-              x: { title: { display: true, text: '発生回数 k' } },
+              x: { title: { display: true, text: '発生回数 k' }, min: cdfXRange.min, max: cdfXRange.max },
               y: {
                 title: { display: true, text: '確率 (%)' },
                 min: 0,
@@ -231,6 +254,8 @@
 
       calcBtn.addEventListener('click', update);
       toggleBtn.addEventListener('click', () => { useUpperTail = !useUpperTail; update(); });
+      pmfViewToggle.addEventListener('click', () => { showFullPmf = !showFullPmf; update(); });
+      cdfViewToggle.addEventListener('click', () => { showFullCdf = !showFullCdf; update(); });
       update();
     </script>
   </body>
