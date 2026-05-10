@@ -22,24 +22,37 @@
       .error { color: #b91c1c; margin-top: 8px; font-weight: 700; }
       .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
       .chart-controls { margin-top: 8px; }
+      .tabs { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+      .mode-help { font-weight: 600; margin-bottom: 14px; }
+      .hidden { display: none; }
     </style>
   </head>
   <body>
     <h1> 確率計算ツール</h1>
-    <p class="desc">想定している真の発生確率をp(0≤p≤1)、試行回数をn回として入力してください。<br>その場合に 「発生回数がちょうどk回となる確率f(k)」 のグラフと、 「発生回数がk回以下となる確率F(k)」 のグラフが下に出ます。<br>kも入力すると、そのkにおけるf(k)とF(k)の値も下に出力します。<br>また切り替えボタンを押すと、F(k)のグラフや値を「k回以下」から「k回以上」に切り替えた場合のものに切り替えできます。</p>
     <div class="panel">
+      <div class="tabs">
+        <button id="mode1Btn" class="active">モード1</button>
+        <button id="mode2Btn">モード2</button>
+      </div>
+      <div id="modeHelp" class="mode-help"></div>
+      <div id="funcHelp" class="desc" style="margin-bottom: 14px;"></div>
+
       <div class="grid">
-        <div>
-          <label for="p">真の発生確率 p (0 ≤ p ≤ 1)</label>
-          <input id="p" type="number" step="any" value="0.4" />
+        <div id="pContainer">
+          <label for="p">発生確率 p (0 ≤ p ≤ 1)</label>
+          <input id="p" type="number" step="any" value="0.3" placeholder="例 : 0.3" />
         </div>
         <div>
           <label for="n">試行回数 n (整数)</label>
-          <input id="n" type="number" step="1" min="0" value="100" />
+          <input id="n" type="number" step="1" min="0" value="100" placeholder="例 : 100" />
         </div>
         <div>
-          <label for="k">発生回数 k (整数)</label>
-          <input id="k" type="number" step="1" min="0" value="45" />
+          <label for="k">評価したい発生回数 k (整数)</label>
+          <input id="k" type="number" step="1" min="0" value="35" placeholder="例 : 35" />
+        </div>
+        <div id="queryPContainer" class="hidden">
+          <label for="queryP">評価したい発生確率 p (任意, 0 ≤ p ≤ 1)</label>
+          <input id="queryP" type="number" step="any" value="0.3" placeholder="例: 0.3" />
         </div>
         <div>
           <button id="calc" class="primary">計算・グラフ更新</button>
@@ -55,7 +68,7 @@
 
     <div class="charts">
       <div class="panel">
-        <h2>発生回数がちょうどk回となる確率f(k)</h2>
+        <h2 id="pmfTitle">発生回数がちょうどk回となる確率f(k)</h2>
         <canvas id="pmfChart"></canvas>
         <div class="chart-controls"><button id="pmfViewToggle">グラフ全体表示</button></div>
       </div>
@@ -70,15 +83,24 @@
       const pInput = document.getElementById('p');
       const nInput = document.getElementById('n');
       const kInput = document.getElementById('k');
+      const queryPInput = document.getElementById('queryP');
       const calcBtn = document.getElementById('calc');
       const toggleBtn = document.getElementById('tailToggle');
       const err = document.getElementById('error');
       const pmfResult = document.getElementById('pmfResult');
       const cdfResult = document.getElementById('cdfResult');
+      const pmfTitle = document.getElementById('pmfTitle');
       const cdfTitle = document.getElementById('cdfTitle');
       const pmfViewToggle = document.getElementById('pmfViewToggle');
       const cdfViewToggle = document.getElementById('cdfViewToggle');
+      const mode1Btn = document.getElementById('mode1Btn');
+      const mode2Btn = document.getElementById('mode2Btn');
+      const modeHelp = document.getElementById('modeHelp');
+      const funcHelp = document.getElementById('funcHelp');
+      const pContainer = document.getElementById('pContainer');
+      const queryPContainer = document.getElementById('queryPContainer');
 
+      let mode = 1;
       let useUpperTail = false;
       let pmfChart, cdfChart;
       let showFullPmf = false;
@@ -90,38 +112,31 @@
         return `${percent.toPrecision(4)}%`;
       }
 
-      // Lanczos approximation for numerically stable log-gamma.
       function logGamma(z) {
-        const p = [
-          676.5203681218851, -1259.1392167224028, 771.32342877765313,
-          -176.61502916214059, 12.507343278686905, -0.13857109526572012,
-          9.9843695780195716e-6, 1.5056327351493116e-7,
-        ];
+        const p = [676.5203681218851, -1259.1392167224028, 771.32342877765313, -176.61502916214059, 12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7];
         if (z < 0.5) return Math.log(Math.PI) - Math.log(Math.sin(Math.PI * z)) - logGamma(1 - z);
         let x = 0.99999999999980993;
-        let t = z - 1;
+        const t = z - 1;
         for (let i = 0; i < p.length; i++) x += p[i] / (t + i + 1);
         const g = 7;
         const y = t + g + 0.5;
         return 0.5 * Math.log(2 * Math.PI) + (t + 0.5) * Math.log(y) - y + Math.log(x);
       }
-
-      function logCombination(n, k) {
-        if (k < 0 || k > n) return -Infinity;
-        return logGamma(n + 1) - logGamma(k + 1) - logGamma(n - k + 1);
-      }
-
+      function logCombination(n, k) { if (k < 0 || k > n) return -Infinity; return logGamma(n + 1) - logGamma(k + 1) - logGamma(n - k + 1); }
       function binomPmf(n, p, k) {
         if (p === 0) return k === 0 ? 1 : 0;
         if (p === 1) return k === n ? 1 : 0;
-        const logP = logCombination(n, k) + k * Math.log(p) + (n - k) * Math.log(1 - p);
-        const v = Math.exp(logP);
-        return Number.isFinite(v) ? v : 0;
+        return Math.exp(logCombination(n, k) + k * Math.log(p) + (n - k) * Math.log(1 - p));
       }
 
-      function buildData(n, p) {
-        const pmf = [];
-        const cdf = [];
+      function betaPdf(x, a, b) {
+        if (x <= 0 || x >= 1) return 0;
+        const logBeta = logGamma(a) + logGamma(b) - logGamma(a + b);
+        return Math.exp((a - 1) * Math.log(x) + (b - 1) * Math.log(1 - x) - logBeta);
+      }
+
+      function buildMode1Data(n, p) {
+        const pmf = [], cdf = [];
         let sum = 0;
         for (let k = 0; k <= n; k++) {
           const v = binomPmf(n, p, k);
@@ -129,10 +144,32 @@
           sum += v;
           cdf.push(Math.min(1, sum));
         }
-        return { pmf, cdf };
+        return { x: Array.from({ length: n + 1 }, (_, i) => i), pmf, cdf };
       }
 
-      function findDefaultRange(n, pmf) {
+      function buildMode2Data(n, k, points = 801) {
+        const a = k + 1;
+        const b = n - k + 1;
+        const x = [];
+        const pdf = [];
+        const cdf = [];
+        let accum = 0;
+        for (let i = 0; i < points; i++) {
+          const p = i / (points - 1);
+          x.push(p);
+          const y = (i === 0 || i === points - 1) ? 0 : betaPdf(p, a, b);
+          pdf.push(y);
+          if (i > 0) {
+            const h = 1 / (points - 1);
+            accum += (pdf[i - 1] + pdf[i]) * h / 2;
+          }
+          cdf.push(Math.min(1, accum));
+        }
+        cdf[cdf.length - 1] = 1;
+        return { x, pmf: pdf, cdf, a, b };
+      }
+
+      function findDefaultRangeMode1(n, pmf) {
         const threshold = 1e-4;
         let left = 0;
         while (left < n && pmf[left] < threshold) left++;
@@ -143,112 +180,142 @@
         return { min: Math.max(0, left - pad), max: Math.min(n, right + pad) };
       }
 
-      function validInputs(p, n, k) {
-        if (!(p >= 0 && p <= 1)) return 'p は 0 以上 1 以下で入力してください。';
+      function findDefaultRangeMode2(pdf) {
+        const n = pdf.length - 1;
+        const maxV = Math.max(...pdf);
+        if (!(maxV > 0)) return { min: 0, max: 1 };
+        const threshold = maxV * 1e-4;
+        let left = 0;
+        while (left < n && pdf[left] < threshold) left++;
+        let right = n;
+        while (right > 0 && pdf[right] < threshold) right--;
+        if (left >= right) return { min: 0, max: 1 };
+        const pad = Math.max(2, Math.floor((right - left) * 0.15));
+        const l = Math.max(0, left - pad);
+        const r = Math.min(n, right + pad);
+        return { min: l / n, max: r / n };
+      }
+
+      function validInputs() {
+        const p = Number(pInput.value), n = Number(nInput.value);
+        const kText = kInput.value.trim();
+        const hasK = kText !== '';
+        const k = hasK ? Number(kText) : null;
         if (!Number.isInteger(n) || n < 0) return 'n は 0 以上の整数で入力してください。';
-        if (!Number.isInteger(k) || k < 0 || k > n) return 'k は 0 以上 n 以下の整数で入力してください。';
+        if (mode === 1 && hasK && (!Number.isInteger(k) || k < 0 || k > n)) return 'k は 0 以上 n 以下の整数で入力してください。';
+        if (mode === 2 && (!hasK || !Number.isInteger(k) || k < 0 || k > n)) return 'モード2では k は 0 以上 n 以下の整数で入力してください。';
+        if (mode === 1 && !(p >= 0 && p <= 1)) return 'p は 0 以上 1 以下で入力してください。';
+        if (mode === 2 && queryPInput.value.trim() !== '') {
+          const qp = Number(queryPInput.value);
+          if (!(qp >= 0 && qp <= 1)) return '評価したい p は 0 以上 1 以下で入力してください。';
+        }
         return '';
       }
 
-      function update() {
-        const p = Number(pInput.value);
-        const n = Number(nInput.value);
-        const k = Number(kInput.value);
+      function setMode(nextMode) {
+        mode = nextMode;
+        mode1Btn.classList.toggle('active', mode === 1);
+        mode2Btn.classList.toggle('active', mode === 2);
+        pContainer.classList.toggle('hidden', mode === 2);
+        queryPContainer.classList.toggle('hidden', mode === 1);
+        useUpperTail = false;
+        showFullPmf = false;
+        showFullCdf = false;
+        modeHelp.textContent = mode === 1
+          ? '発生確率pと試行回数nを入力し、その場合の発生回数kに関する確率を求めるモードです'
+          : '試行回数nと発生回数kを入力し、その場合の発生確率がp以下(または以上)である確率を求めるモードです';
+        funcHelp.innerHTML = mode === 1
+          ? 'f(k)：発生回数がちょうどk回となる確率<br>F(k)：発生回数がk回以下となる確率(ボタンで\"k回以上\"に切り替え可能)'
+          : 'g(p)：発生確率pの確率密度<br>G(p)：発生確率がp以下である確率(ボタンで\"p以上\"に切り替え可能)';
+        update();
+      }
 
-        const message = validInputs(p, n, k);
-        if (message) {
-          err.textContent = message;
-          pmfResult.textContent = '';
-          cdfResult.textContent = '';
-          return;
-        }
+      function update() {
+        const msg = validInputs();
+        if (msg) { err.textContent = msg; pmfResult.textContent = ''; cdfResult.textContent = ''; return; }
         err.textContent = '';
 
-        const ks = Array.from({ length: n + 1 }, (_, i) => i);
-        const { pmf, cdf } = buildData(n, p);
-        const defaultRange = findDefaultRange(n, pmf);
-        const pmfXRange = showFullPmf ? { min: 0, max: n } : defaultRange;
-        const cdfXRange = showFullCdf ? { min: 0, max: n } : defaultRange;
-        pmfViewToggle.textContent = showFullPmf ? '省略表示に戻す' : 'グラフ全体表示';
-        cdfViewToggle.textContent = showFullCdf ? '省略表示に戻す' : 'グラフ全体表示';
+        const n = Number(nInput.value);
+        const kText = kInput.value.trim();
+        const hasK = kText !== '';
+        const k = hasK ? Number(kText) : null;
+        let x, pmf, cdf, pmfXMin, pmfXMax, cdfXMin, cdfXMax, xLabel, pmfDatasetLabel, cdfDatasetLabel;
 
-        const pmfAtK = pmf[k] * 100;
-        const lowerAtK = cdf[k] * 100;
-        const upperAtK = 100 - (k === 0 ? 0 : cdf[k - 1] * 100);
-
-        pmfResult.innerHTML = `<span class="mono">発生回数がちょうど${k}回となる確率f(${k}) = ${pmfAtK.toPrecision(6)} %</span>`;
-
-        if (useUpperTail) {
-          cdfResult.innerHTML = `<span class="mono">発生回数が${k}回以上となる確率F(${k}) = ${upperAtK.toPrecision(6)} %</span>`;
-          cdfTitle.textContent = '発生回数がk回以上となる確率F(k)';
-          toggleBtn.textContent = 'F(k)を「k回以下」の場合に切替';
-          toggleBtn.classList.add('active');
+        if (mode === 1) {
+          const p = Number(pInput.value);
+          ({ x, pmf, cdf } = buildMode1Data(n, p));
+          const defaultRange = findDefaultRangeMode1(n, pmf);
+          pmfXMin = showFullPmf ? 0 : defaultRange.min;
+          pmfXMax = showFullPmf ? n : defaultRange.max;
+          cdfXMin = showFullCdf ? 0 : defaultRange.min;
+          cdfXMax = showFullCdf ? n : defaultRange.max;
+          xLabel = '発生回数 k';
+          pmfDatasetLabel = 'f(k)=P(X=k)';
+          cdfDatasetLabel = useUpperTail ? 'F(k)=P(X≥k)' : 'F(k)=P(X≤k)';
+          if (hasK) {
+            const pmfAtK = pmf[k] * 100;
+            const lowerAtK = cdf[k] * 100;
+            const upperAtK = 100 - (k === 0 ? 0 : cdf[k - 1] * 100);
+            pmfResult.innerHTML = `<span class="mono">発生回数がちょうど${k}回となる確率f(${k}) = ${pmfAtK.toPrecision(6)} %</span>`;
+            cdfResult.innerHTML = useUpperTail
+              ? `<span class="mono">発生回数が${k}回以上となる確率F(${k}) = ${upperAtK.toPrecision(6)} %</span>`
+              : `<span class="mono">発生回数が${k}回以下となる確率F(${k}) = ${lowerAtK.toPrecision(6)} %</span>`;
+          } else {
+            pmfResult.innerHTML = '<span class="mono">評価したいkを入力すると、f(k) の値を表示します。</span>';
+            cdfResult.innerHTML = '<span class="mono">評価したいkを入力すると、F(k) の値を表示します。</span>';
+          }
+          pmfTitle.textContent = '発生回数がちょうどk回となる確率f(k)';
+          cdfTitle.textContent = useUpperTail ? '発生回数がk回以上となる確率F(k)' : '発生回数がk回以下となる確率F(k)';
+          toggleBtn.textContent = useUpperTail ? 'F(k)を「k回以下」の場合に切替' : 'F(k)を「k回以上」の場合に切替';
+          toggleBtn.classList.toggle('active', useUpperTail);
         } else {
-          cdfResult.innerHTML = `<span class="mono">発生回数が${k}回以下となる確率F(${k}) = ${lowerAtK.toPrecision(6)} %</span>`;
-          cdfTitle.textContent = '発生回数がk回以下となる確率F(k)';
-          toggleBtn.textContent = 'F(k)を「k回以上」の場合に切替';
-          toggleBtn.classList.remove('active');
+          ({ x, pmf, cdf } = buildMode2Data(n, k));
+          const defaultRange = findDefaultRangeMode2(pmf);
+          pmfXMin = showFullPmf ? 0 : defaultRange.min;
+          pmfXMax = showFullPmf ? 1 : defaultRange.max;
+          cdfXMin = showFullCdf ? 0 : defaultRange.min;
+          cdfXMax = showFullCdf ? 1 : defaultRange.max;
+          xLabel = '発生確率 p';
+          pmfDatasetLabel = 'g(p)';
+          cdfDatasetLabel = useUpperTail ? 'G(p)=P(X≥p)' : 'G(p)=P(X≤p)';
+          pmfTitle.textContent = '発生確率pの確率密度 g(p)';
+          cdfTitle.textContent = useUpperTail ? '発生確率がp以上である確率 G(p)' : '発生確率がp以下である確率 G(p)';
+          toggleBtn.textContent = useUpperTail ? 'G(p)を「p以下」の場合に切替' : 'G(p)を「p以上」の場合に切替';
+          toggleBtn.classList.toggle('active', useUpperTail);
+          pmfResult.innerHTML = '';
+          if (queryPInput.value.trim() !== '') {
+            const qp = Number(queryPInput.value);
+            const idx = Math.min(x.length - 1, Math.max(0, Math.round(qp * (x.length - 1))));
+            const lower = cdf[idx] * 100;
+            const upper = (1 - cdf[idx]) * 100;
+            cdfResult.innerHTML = useUpperTail
+              ? `<span class="mono">発生確率が${qp}以上である確率G(${qp}) = ${upper.toPrecision(6)} %</span>`
+              : `<span class="mono">発生確率が${qp}以下である確率G(${qp}) = ${lower.toPrecision(6)} %</span>`;
+          } else {
+            cdfResult.innerHTML = '<span class="mono">評価したい p を入力すると、G(p) の値を表示します。</span>';
+          }
         }
 
-        const cdfForPlot = useUpperTail
-          ? ks.map((x) => 1 - (x === 0 ? 0 : cdf[x - 1]))
-          : cdf;
+        const cdfForPlot = useUpperTail ? cdf.map((v) => 1 - v) : cdf;
+        pmfViewToggle.textContent = showFullPmf ? '省略表示に戻す' : 'グラフ全体表示';
+        cdfViewToggle.textContent = showFullCdf ? '省略表示に戻す' : 'グラフ全体表示';
 
         if (pmfChart) pmfChart.destroy();
         if (cdfChart) cdfChart.destroy();
 
+        const pmfData = mode === 1 ? pmf : x.map((xp, i) => ({ x: xp, y: pmf[i] }));
+        const cdfData = mode === 1 ? cdfForPlot : x.map((xp, i) => ({ x: xp, y: cdfForPlot[i] }));
+
         pmfChart = new Chart(document.getElementById('pmfChart'), {
-          type: 'bar',
-          data: {
-            labels: ks,
-            datasets: [{ label: 'f(k)=P(X=k)', data: pmf }],
-          },
-          options: {
-            plugins: {
-              tooltip: {
-                callbacks: {
-                  label: (context) => `${context.dataset.label}: ${formatPercentSignificant4(context.parsed.y)}`,
-                },
-              },
-            },
-            scales: {
-              x: { title: { display: true, text: '発生回数 k' }, min: pmfXRange.min, max: pmfXRange.max },
-              y: {
-                title: { display: true, text: '確率 (%)' },
-                ticks: {
-                  callback: (value) => `${(Number(value) * 100).toFixed(0)}%`,
-                },
-              },
-            },
-          },
+          type: mode === 1 ? 'bar' : 'line',
+          data: { labels: mode === 1 ? x : undefined, datasets: [{ label: pmfDatasetLabel, data: pmfData, pointRadius: mode === 1 ? 3 : 0, tension: mode === 1 ? 0 : 0.25 }] },
+          options: { parsing: mode === 1, plugins: { tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${formatPercentSignificant4(c.parsed.y)}` } } }, scales: { x: { type: mode === 1 ? 'category' : 'linear', title: { display: true, text: xLabel }, min: pmfXMin, max: pmfXMax }, y: { title: { display: true, text: mode === 1 ? '確率 (%)' : '確率密度' }, ticks: { callback: (v) => mode === 1 ? `${(Number(v) * 100).toFixed(0)}%` : Number(v).toPrecision(3) } } } }
         });
 
         cdfChart = new Chart(document.getElementById('cdfChart'), {
-          type: 'line',
-          data: {
-            labels: ks,
-            datasets: [{ label: useUpperTail ? 'F(k)=P(X≥k)' : 'F(k)=P(X≤k)', data: cdfForPlot, stepped: true }],
-          },
-          options: {
-            plugins: {
-              tooltip: {
-                callbacks: {
-                  label: (context) => `${context.dataset.label}: ${formatPercentSignificant4(context.parsed.y)}`,
-                },
-              },
-            },
-            scales: {
-              x: { title: { display: true, text: '発生回数 k' }, min: cdfXRange.min, max: cdfXRange.max },
-              y: {
-                title: { display: true, text: '確率 (%)' },
-                min: 0,
-                max: 1,
-                ticks: {
-                  callback: (value) => `${(Number(value) * 100).toFixed(0)}%`,
-                },
-              },
-            },
-          },
+          type: mode === 1 ? 'line' : 'line',
+          data: { labels: mode === 1 ? x : undefined, datasets: [{ label: cdfDatasetLabel, data: cdfData, stepped: mode === 1, pointRadius: mode === 1 ? 3 : 0, tension: mode === 1 ? 0 : 0.25 }] },
+          options: { parsing: mode === 1, plugins: { tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${formatPercentSignificant4(c.parsed.y)}` } } }, scales: { x: { type: mode === 1 ? 'category' : 'linear', title: { display: true, text: xLabel }, min: cdfXMin, max: cdfXMax }, y: { title: { display: true, text: '確率 (%)' }, min: 0, max: 1, ticks: { callback: (v) => `${(Number(v) * 100).toFixed(0)}%` } } } }
         });
       }
 
@@ -256,7 +323,10 @@
       toggleBtn.addEventListener('click', () => { useUpperTail = !useUpperTail; update(); });
       pmfViewToggle.addEventListener('click', () => { showFullPmf = !showFullPmf; update(); });
       cdfViewToggle.addEventListener('click', () => { showFullCdf = !showFullCdf; update(); });
-      update();
+      mode1Btn.addEventListener('click', () => setMode(1));
+      mode2Btn.addEventListener('click', () => setMode(2));
+
+      setMode(1);
     </script>
   </body>
 </html>
