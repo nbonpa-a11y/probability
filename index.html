@@ -162,23 +162,72 @@
         return { x: Array.from({ length: n + 1 }, (_, i) => i), pmf, cdf };
       }
 
-      function buildMode2Data(n, k, points = 801) {
+      function betaCdf(p, a, b) {
+        if (p <= 0) return 0;
+        if (p >= 1) return 1;
+
+        const MAX_ITER = 200;
+        const EPS = 3e-14;
+        const FPMIN = 1e-300;
+
+        const betacf = (x, aa, bb) => {
+          const qab = aa + bb;
+          const qap = aa + 1;
+          const qam = aa - 1;
+          let c = 1;
+          let d = 1 - qab * x / qap;
+          if (Math.abs(d) < FPMIN) d = FPMIN;
+          d = 1 / d;
+          let h = d;
+
+          for (let m = 1; m <= MAX_ITER; m++) {
+            const m2 = 2 * m;
+            let del;
+
+            let num = m * (bb - m) * x / ((qam + m2) * (aa + m2));
+            d = 1 + num * d;
+            if (Math.abs(d) < FPMIN) d = FPMIN;
+            c = 1 + num / c;
+            if (Math.abs(c) < FPMIN) c = FPMIN;
+            d = 1 / d;
+            h *= d * c;
+
+            num = -(aa + m) * (qab + m) * x / ((aa + m2) * (qap + m2));
+            d = 1 + num * d;
+            if (Math.abs(d) < FPMIN) d = FPMIN;
+            c = 1 + num / c;
+            if (Math.abs(c) < FPMIN) c = FPMIN;
+            d = 1 / d;
+            del = d * c;
+            h *= del;
+
+            if (Math.abs(del - 1) < EPS) break;
+          }
+          return h;
+        };
+
+        const logBt = logGamma(a + b) - logGamma(a) - logGamma(b) + a * Math.log(p) + b * Math.log(1 - p);
+        const bt = Math.exp(logBt);
+        const threshold = (a + 1) / (a + b + 2);
+
+        if (p < threshold) {
+          return bt * betacf(p, a, b) / a;
+        }
+        return 1 - bt * betacf(1 - p, b, a) / b;
+      }
+
+      function buildMode2Data(n, k, points = 2001) {
         const a = k + 1;
         const b = n - k + 1;
         const x = [];
         const pdf = [];
         const cdf = [];
-        let accum = 0;
         for (let i = 0; i < points; i++) {
           const p = i / (points - 1);
           x.push(p);
           const y = (i === 0 || i === points - 1) ? 0 : betaPdf(p, a, b);
           pdf.push(y);
-          if (i > 0) {
-            const h = 1 / (points - 1);
-            accum += (pdf[i - 1] + pdf[i]) * h / 2;
-          }
-          cdf.push(Math.min(1, accum));
+          cdf.push(betaCdf(p, a, b));
         }
         cdf[cdf.length - 1] = 1;
         return { x, pmf: pdf, cdf, a, b };
@@ -304,9 +353,9 @@
           if (queryPInput.value.trim() !== '') {
             const qpRaw = queryPInput.value.trim();
             const qp = parseProbabilityInput(queryPInput.value);
-            const idx = Math.min(x.length - 1, Math.max(0, Math.round(qp * (x.length - 1))));
-            const lower = cdf[idx] * 100;
-            const upper = (1 - cdf[idx]) * 100;
+            const lowerProb = betaCdf(qp, k + 1, n - k + 1);
+            const lower = lowerProb * 100;
+            const upper = (1 - lowerProb) * 100;
             cdfResult.innerHTML = useUpperTail
               ? `<span class="mono">発生確率が${qpRaw}以上である確率G(${qpRaw}) = ${upper.toPrecision(6)} %</span>`
               : `<span class="mono">発生確率が${qpRaw}以下である確率G(${qpRaw}) = ${lower.toPrecision(6)} %</span>`;
